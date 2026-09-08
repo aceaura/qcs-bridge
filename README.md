@@ -3,19 +3,70 @@
 让 Qoder 直接以 CloudShell 的 IAM 身份和网络位置执行检测命令。
 
 ```
-Qoder ──MCP──> qcs-mcp (本地) ──SQS──> qcs-agent (CloudShell) ──bash──> 线上环境
-                 签名+发命令        长轮询      验签+执行+回传
+Qoder ──MCP/CLI──> 本地桥接端 ──SQS──> qcs-agent (CloudShell) ──bash──> 线上环境
+                     签名+发命令      长轮询      验签+执行+回传
 ```
 
 **模式说明**：出站长轮询 agent，与 SSM Agent / ECS Agent / GitHub Actions runner 同架构。
 CloudShell 无入站能力、无远程执行 API，这是唯一不需要公网入口的标准做法。
 
-## 两种安装模式（二选一）
+## 安装
 
-- **MCP 模式**：Qoder 通过 MCP 工具直接调用 → 按 [INSTALL-MCP.md](INSTALL-MCP.md) 安装
-- **CLI + Skill 模式**：Qoder 通过 Bash 调 `qcs` 命令行，Skill 文件教会它用法 → 按 [INSTALL-CLI.md](INSTALL-CLI.md) 安装
+全程约 10 分钟。本地客户端两种模式二选一（见第 5 步）。
 
-两个指引文件各自包含全部步骤（队列、授权、密钥、agent、客户端），不需要交叉参考。
+**1. 创建 SQS 队列**（本地 Git Bash，前提 `aws sts get-caller-identity` 能通）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/create-queues.sh | AWS_REGION=<你的region> bash
+```
+
+**2. 授权**（一次）：把 `infra/iam-policy-qcs-bridge.json` 里的 `REGION`/`ACCOUNT_ID` 替换后，
+作为 inline policy 挂到两个身份：本地 IAM 身份（只需 SQS 权限，不需要 EKS）和 CloudShell 身份。
+
+**3. 共享密钥**（本地一次）：`openssl rand -hex 32` 生成，写入 `%USERPROFILE%\.qcs-secret`。
+CloudShell 侧在第 4 步由安装脚本提示粘贴。
+
+**4. CloudShell 安装 agent**（CloudShell 内一条命令，自动下载二进制、装到 `~/.qcs/`、配好 PATH）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | bash
+```
+
+之后启动只需敲 `qcs-start`（前台，所有收发交互实时滚屏；`qcs-start --background` 挂后台，`tail -f ~/qcs-agent.log` 观察）。
+
+**5. 本地客户端（二选一）**：
+
+- **MCP 模式** —— Qoder MCP 配置添加：
+  ```json
+  {
+    "mcpServers": {
+      "qcs-bridge": {
+        "command": "W:\\QoderCN\\qcs-bridge\\bin\\qcs-mcp.exe",
+        "env": {
+          "QCS_CMD_QUEUE": "qcs-commands.fifo",
+          "QCS_RESULT_QUEUE": "qcs-results.fifo",
+          "QCS_HEARTBEAT_QUEUE": "qcs-heartbeat.fifo",
+          "AWS_REGION": "<你的region>",
+          "AWS_PROFILE": "<本地profile，用默认凭证可删>"
+        }
+      }
+    }
+  }
+  ```
+- **CLI + Skill 模式** —— 设环境变量后装 CLI 和技能：
+  ```cmd
+  setx QCS_CMD_QUEUE qcs-commands.fifo
+  setx QCS_RESULT_QUEUE qcs-results.fifo
+  setx QCS_HEARTBEAT_QUEUE qcs-heartbeat.fifo
+  setx AWS_REGION <你的region>
+  setx PATH "%PATH%;W:\QoderCN\qcs-bridge\bin"
+  mkdir "%USERPROFILE%\.qoder-cn\skills\qcs-cloudshell" 2>nul
+  copy skills\qcs-cloudshell\SKILL.md "%USERPROFILE%\.qoder-cn\skills\qcs-cloudshell\SKILL.md"
+  ```
+  （设完重开终端/Qoder 会话生效。）
+
+**6. 验证**：Qoder 里说"用 cloudshell_status / qcs status 看看桥在不在"，返回 `ONLINE` 即完成；
+`OFFLINE` 说明 CloudShell 的 VM 被回收，重开 CloudShell 运行 `qcs-start`。
 
 ## 组件
 
@@ -27,7 +78,7 @@ CloudShell 无入站能力、无远程执行 API，这是唯一不需要公网�
 | `internal/client` | 共享（本地） | qcs-mcp 与 qcs 共用的桥接客户端 |
 | `internal/proto` | 共享 | 消息格式、HMAC-SHA256 签名/验签、只读白名单、输出截断 |
 | `skills/qcs-cloudshell/SKILL.md` | Qoder 技能目录 | CLI 模式下教 Qoder 何时、如何用 `qcs` |
-| `infra/` | 一次性部署 | 建队列脚本、最小 IAM policy、CloudShell 安装脚本（装到 `~/.qcs/`，提供 `qcs-start` 启动命令） |
+| `infra/` | 部署 | 建队列脚本、最小 IAM policy、CloudShell 安装脚本（装到 `~/.qcs/`，提供 `qcs-start`） |
 
 ## 安全设计
 
@@ -36,10 +87,6 @@ CloudShell 无入站能力、无远程执行 API，这是唯一不需要公网�
 - 队列开 SQS 托管 SSE，消息保留 1 小时
 - agent 审计日志：`~/qcs-audit.log`（时间、命令、退出码、拒绝原因）
 - 队列 IAM policy 只授权两个指定身份（`infra/iam-policy-qcs-bridge.json`）
-
-## 部署
-
-完整步骤见 [INSTALL-MCP.md](INSTALL-MCP.md) 或 [INSTALL-CLI.md](INSTALL-CLI.md)（各自自包含，选一个跟随即可）。
 
 ## 已知限制
 
@@ -54,6 +101,7 @@ CloudShell 无入站能力、无远程执行 API，这是唯一不需要公网�
 cd qcs-bridge
 go test ./...                                  # 单元测试（签名/白名单/截断）
 go build -o bin/qcs-mcp.exe ./cmd/qcs-mcp      # 本地 MCP
+go build -o bin/qcs.exe ./cmd/qcs              # 本地 CLI
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
   go build -o bin/qcs-agent ./cmd/qcs-agent    # CloudShell agent
 ```
