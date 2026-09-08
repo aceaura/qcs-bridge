@@ -85,7 +85,14 @@ func New(ctx context.Context) (*Bridge, error) {
 		return nil, err
 	}
 
-	cfg, err := config.LoadDefaultConfig(ctx)
+	// Load the named profile explicitly: with WithSharedConfigProfile the SDK
+	// ignores static AWS_ACCESS_KEY_ID env vars that would otherwise shadow the
+	// profile's credentials.
+	loadOpts := []func(*config.LoadOptions) error{}
+	if profile := getenv("QCS_AWS_PROFILE", "AWS_PROFILE"); profile != "" {
+		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
+	}
+	cfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("aws config: %w", err)
 	}
