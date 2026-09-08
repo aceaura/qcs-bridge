@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "QcsBridgeQueues",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueUrl",
+        "sqs:GetQueueAttributes"
+      ],
+      "Resource": [
+        "arn:aws:sqs:REGION:ACCOUNT_ID:qcs-commands.fifo",
+        "arn:aws:sqs:REGION:ACCOUNT_ID:qcs-results.fifo",
+        "arn:aws:sqs:REGION:ACCOUNT_ID:qcs-heartbeat.fifo"
+      ]
+    }
+  ]
+}
