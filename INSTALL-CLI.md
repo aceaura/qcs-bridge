@@ -31,28 +31,26 @@ AWS_REGION=<你的region> bash create-queues.sh
 - 你本地使用的 IAM 身份（qcs 只需 SQS 权限，**不需要 EKS 权限**）
 - 你登录控制台（即 CloudShell）的身份
 
-## 3. 分发共享密钥（两端各一次）
+## 3. 分发共享密钥（本地一次，CloudShell 在第 4 步安装时交互输入）
 
 ```bash
 openssl rand -hex 32    # 生成一个密钥
 ```
 
 - **本地**：新建文件 `%USERPROFILE%\.qcs-secret`，内容就是这一行密钥
-- **CloudShell**：
-  ```bash
-  echo '<同一密钥>' > ~/.qcs-secret && chmod 600 ~/.qcs-secret
-  ```
+- **CloudShell**：下一步的安装脚本会提示你粘贴，自动写入 `~/.qcs-secret`
 
-## 4. 在 CloudShell 启动 agent
+## 4. 在 CloudShell 安装并启动 agent
 
-CloudShell 控制台 **Actions → Upload file**，上传 `bin/qcs-agent` 和 `infra/restart-qcs.sh` 到 `~/`，然后：
+CloudShell 控制台 **Actions → Upload file**，上传 `bin/qcs-agent` 和 `infra/install-agent.sh` 到 `~/`，然后：
 
 ```bash
-chmod +x ~/qcs-agent ~/restart-qcs.sh
-~/restart-qcs.sh
+bash install-agent.sh        # 安装到 ~/.qcs/，途中粘贴共享密钥
+qcs-start                    # 前台启动，所有收发交互实时显示在终端
 ```
 
-看到 `qcs-agent started (pid ...)` 即成功。
+- 以后任何时候敲 `qcs-start` 即可启动；后台模式：`qcs-start --background`，配合 `tail -f ~/qcs-agent.log`。
+- 终端可见：`>>> RECV` 收到的命令、`<<< RESULT` 完整 stdout/stderr、每分钟心跳；审计流水在 `~/qcs-audit.log`。
 
 ## 5. 安装 CLI + Skill（本地）
 
@@ -89,10 +87,10 @@ qcs status
 ```
 
 - 输出 `ONLINE` → 完成。然后在 Qoder 里说"检查 eks 集群状态"，Qoder 会自动调用 `qcs exec`。
-- `OFFLINE` → CloudShell 的 VM 被回收了，重开 CloudShell 跑 `~/restart-qcs.sh`。
+- `OFFLINE` → CloudShell 的 VM 被回收了，重开 CloudShell 运行 `qcs-start`。
 
 ## 运维须知
 
-- CloudShell 空闲约 20-30 分钟回收 VM，agent 随之退出。重开 CloudShell → `~/restart-qcs.sh`。
-- 审计：CloudShell 内 `~/qcs-audit.log`。
+- CloudShell 空闲约 20-30 分钟回收 VM，agent 随之退出。重开 CloudShell → `qcs-start`。
+- 审计：CloudShell 内 `~/qcs-audit.log`；完整交互输出在终端或 `~/qcs-agent.log`。
 - agent 默认只读模式；CLI 的退出码就是远端命令退出码，方便脚本化（`qcs exec "..." || alert`）。

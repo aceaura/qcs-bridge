@@ -27,7 +27,7 @@ CloudShell 无入站能力、无远程执行 API，这是唯一不需要公网�
 | `internal/client` | 共享（本地） | qcs-mcp 与 qcs 共用的桥接客户端 |
 | `internal/proto` | 共享 | 消息格式、HMAC-SHA256 签名/验签、只读白名单、输出截断 |
 | `skills/qcs-cloudshell/SKILL.md` | Qoder 技能目录 | CLI 模式下教 Qoder 何时、如何用 `qcs` |
-| `infra/` | 一次性部署 | 建队列脚本、最小 IAM policy、agent 重启脚本 |
+| `infra/` | 一次性部署 | 建队列脚本、最小 IAM policy、CloudShell 安装脚本（装到 `~/.qcs/`，提供 `qcs-start` 启动命令） |
 
 ## 安全设计
 
@@ -43,7 +43,7 @@ CloudShell 无入站能力、无远程执行 API，这是唯一不需要公网�
 
 ## 已知限制
 
-- **CloudShell 空闲 ~20-30 分钟回收 VM，agent 会死**——重开 CloudShell 跑 `~/restart-qcs.sh` 即可。`cloudshell_status` 会报告心跳新鲜度（>3 分钟判 STALE）。
+- **CloudShell 空闲 ~20-30 分钟回收 VM，agent 会死**——重开 CloudShell 敲 `qcs-start` 即可。`cloudshell_status` / `qcs status` 会报告心跳新鲜度（>3 分钟判 STALE）。
 - 单次输出 ≤ ~200KB（超出截断并标注 `[truncated]`）
 - 端到端延迟 ~1-3 秒（SQS 长轮询）
 - agent 单并发：一次只执行一条命令

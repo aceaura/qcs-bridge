@@ -15,7 +15,7 @@ description: 通过 qcs CLI 在 AWS CloudShell 环境里执行只读检测命令
    qcs status
    ```
 
-   输出 `ONLINE` 才能继续。若显示 `OFFLINE` 或 `STALE`，告知用户：CloudShell 的 VM 已被回收（空闲约 20-30 分钟自动回收），请重新打开 CloudShell 并运行 `~/restart-qcs.sh`，然后重试。**不要**反复重试 exec。
+   输出 `ONLINE` 才能继续。若显示 `OFFLINE` 或 `STALE`，告知用户：CloudShell 的 VM 已被回收（空闲约 20-30 分钟自动回收），请重新打开 CloudShell 并运行 `qcs-start`（或后台模式 `qcs-start --background`），然后重试。**不要**反复重试 exec。
 
 2. **执行检测命令**：
 

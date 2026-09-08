@@ -211,7 +211,7 @@ func (b *Bridge) Status(ctx context.Context) (string, error) {
 		}
 	}
 	if latest == nil {
-		return "qcs-agent: OFFLINE (no heartbeat in queue — CloudShell VM was likely recycled; reopen CloudShell and run ~/restart-qcs.sh)", nil
+		return "qcs-agent: OFFLINE (no heartbeat in queue — CloudShell VM was likely recycled; reopen CloudShell and run qcs-start)", nil
 	}
 
 	latestBody, _ := json.Marshal(*latest)

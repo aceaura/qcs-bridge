@@ -32,32 +32,27 @@ AWS_REGION=<你的region> bash create-queues.sh
 - 你本地使用的 IAM 身份（qcs-mcp 只需 SQS 权限，**不需要 EKS 权限**）
 - 你登录控制台（即 CloudShell）的身份
 
-## 3. 分发共享密钥（两端各一次）
+## 3. 分发共享密钥（本地一次，CloudShell 在第 4 步安装时交互输入）
 
 ```bash
 openssl rand -hex 32    # 生成一个密钥，例如 a1b2c3...
 ```
 
 - **本地**：新建文件 `%USERPROFILE%\.qcs-secret`，内容就是这一行密钥
-- **CloudShell**：打开 CloudShell 执行
-  ```bash
-  echo '<同一密钥>' > ~/.qcs-secret && chmod 600 ~/.qcs-secret
-  ```
+- **CloudShell**：下一步的安装脚本会提示你粘贴，自动写入 `~/.qcs-secret`（权限 600）
 
-## 4. 在 CloudShell 启动 agent
+## 4. 在 CloudShell 安装并启动 agent
 
-CloudShell 控制台菜单 **Actions → Upload file**，上传 `bin/qcs-agent` 和 `infra/restart-qcs.sh`，然后：
+CloudShell 控制台菜单 **Actions → Upload file**，上传两个文件：`bin/qcs-agent` 和 `infra/install-agent.sh`，然后：
 
 ```bash
-mv ~/cloudshell_upload/qcs-agent ~/qcs-agent 2>/dev/null || mv ~/qcs-agent.upload ~/qcs-agent 2>/dev/null || true
-# 如果上传目录不同，直接把文件放到 ~/ 即可
-chmod +x ~/qcs-agent
-cp ~/cloudshell_upload/restart-qcs.sh ~/restart-qcs.sh 2>/dev/null || true
-chmod +x ~/restart-qcs.sh
-~/restart-qcs.sh
+bash install-agent.sh        # 安装到 ~/.qcs/，途中粘贴共享密钥
+qcs-start                    # 前台启动，所有收发交互实时显示在终端
 ```
 
-看到 `qcs-agent started (pid ...)` 即成功。可用 `tail -f ~/qcs-agent.log` 观察。
+- `qcs-start` 已装入 `~/.qcs/` 并加进 PATH，以后任何时候敲这一条命令即可启动。
+- 想挂后台：`qcs-start --background`，然后用 `tail -f ~/qcs-agent.log` 看实时交互。
+- 终端里会看到：每条收到的命令（`>>> RECV`）、完整输出（`<<< RESULT` + stdout/stderr 全文）、每分钟心跳。审计流水在 `~/qcs-audit.log`。
 
 ## 5. 配置 Qoder MCP
 
@@ -87,10 +82,10 @@ chmod +x ~/restart-qcs.sh
 在 Qoder 对话里说：**"用 cloudshell_status 看看桥在不在"**。
 
 - 返回 `ONLINE` → 完成，可以直接派检测任务了
-- 返回 `OFFLINE` → CloudShell 的 VM 被回收了，重开 CloudShell 跑 `~/restart-qcs.sh`
+- 返回 `OFFLINE` → CloudShell 的 VM 被回收了，重开 CloudShell 运行 `qcs-start`
 
 ## 运维须知
 
-- CloudShell 空闲约 20-30 分钟回收 VM，agent 随之退出。重开 CloudShell → `~/restart-qcs.sh` 即可恢复。CloudShell 的 home 目录持久，`~/qcs-agent` 和密钥不会丢。
-- 审计：CloudShell 内 `~/qcs-audit.log` 记录每一条执行/拒绝的命令。
-- agent 默认只读模式。确需放开时在 `~/restart-qcs.sh` 中给 `qcs-agent` 加 `--allow-all`（不推荐长期使用）。
+- CloudShell 空闲约 20-30 分钟回收 VM，agent 随之退出。重开 CloudShell → `qcs-start`（或 `qcs-start --background`）即可恢复。CloudShell 的 home 目录持久，`~/.qcs/` 和密钥不会丢。
+- 审计：CloudShell 内 `~/qcs-audit.log` 记录每一条执行/拒绝的命令；完整交互输出在终端或 `~/qcs-agent.log`。
+- agent 默认只读模式。确需放开时编辑 `~/.qcs/qcs-start`，给 `qcs-agent` 加 `--allow-all`（不推荐长期使用）。

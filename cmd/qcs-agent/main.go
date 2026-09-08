@@ -107,7 +107,9 @@ func (a *agent) sendHeartbeat(ctx context.Context) {
 	})
 	if err != nil {
 		log.Printf("heartbeat send failed: %v", err)
+		return
 	}
+	log.Printf("--- heartbeat ok (uptime %ds) ---", h.UptimeS)
 }
 
 func (a *agent) runHeartbeatLoop(ctx context.Context) {
@@ -169,6 +171,36 @@ func (a *agent) execute(ctx context.Context, c proto.Command) proto.Result {
 	return r
 }
 
+// displayResult prints the full interaction to the terminal (and log file
+// when stdout/stderr are redirected there), so every request/response is visible.
+func (a *agent) displayResult(r proto.Result) {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "<<< RESULT id=%s exit=%d truncated=%v\n", r.ID, r.ExitCode, r.Truncated)
+	if r.Rejected != "" {
+		fmt.Fprintf(&sb, "[REJECTED] %s\n", r.Rejected)
+	}
+	sb.WriteString("----- stdout -----\n")
+	if r.Stdout == "" {
+		sb.WriteString("(empty)\n")
+	} else {
+		sb.WriteString(r.Stdout)
+		if !strings.HasSuffix(r.Stdout, "\n") {
+			sb.WriteString("\n")
+		}
+	}
+	sb.WriteString("----- stderr -----\n")
+	if r.Stderr == "" {
+		sb.WriteString("(empty)\n")
+	} else {
+		sb.WriteString(r.Stderr)
+		if !strings.HasSuffix(r.Stderr, "\n") {
+			sb.WriteString("\n")
+		}
+	}
+	sb.WriteString("------------------")
+	log.Print(sb.String())
+}
+
 func (a *agent) pollOnce(ctx context.Context) error {
 	out, err := a.sqsClient.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(a.cmdQueue),
@@ -191,7 +223,9 @@ func (a *agent) pollOnce(ctx context.Context) error {
 			continue
 		}
 
+		a.auditf(">>> RECV id=%s timeout=%ds cmd=%q", c.ID, c.Timeout, c.Cmd)
 		r := a.execute(ctx, c)
+		a.displayResult(r)
 		proto.SignResult(a.secret, &r)
 		body, _ := json.Marshal(r)
 		_, sendErr := a.sqsClient.SendMessage(ctx, &sqs.SendMessageInput{
