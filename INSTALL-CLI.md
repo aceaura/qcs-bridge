@@ -18,9 +18,10 @@ Skill 文件让 Qoder 自动知道何时、如何使用它。
 
 ## 1. 创建 SQS 队列（一次）
 
+本地 Git Bash 一条命令（先确认 `aws sts get-caller-identity` 能通）：
+
 ```bash
-cd qcs-bridge/infra
-AWS_REGION=<你的region> bash create-queues.sh
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/create-queues.sh | AWS_REGION=<你的region> bash
 ```
 
 ## 2. 授权（一次）
@@ -42,10 +43,15 @@ openssl rand -hex 32    # 生成一个密钥
 
 ## 4. 在 CloudShell 安装并启动 agent
 
-CloudShell 控制台 **Actions → Upload file**，上传 `bin/qcs-agent` 和 `infra/install-agent.sh` 到 `~/`，然后：
+打开 CloudShell，粘贴一条命令（自动下载二进制、装到 `~/.qcs/`、途中提示你粘贴共享密钥）：
 
 ```bash
-bash install-agent.sh        # 安装到 ~/.qcs/，途中粘贴共享密钥
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | bash
+```
+
+装完启动：
+
+```bash
 qcs-start                    # 前台启动，所有收发交互实时显示在终端
 ```
 

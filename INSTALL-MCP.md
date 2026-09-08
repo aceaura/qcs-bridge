@@ -17,10 +17,13 @@
 
 ## 1. 创建 SQS 队列（一次）
 
+本地 Git Bash 一条命令（先确认 `aws sts get-caller-identity` 能通）：
+
 ```bash
-cd qcs-bridge/infra
-AWS_REGION=<你的region> bash create-queues.sh
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/create-queues.sh | AWS_REGION=<你的region> bash
 ```
+
+（也可以本地 clone 后跑 `infra/create-queues.sh`，效果相同。）
 
 记下输出的 3 个队列 URL（`qcs-commands.fifo` / `qcs-results.fifo` / `qcs-heartbeat.fifo`）。
 
@@ -43,10 +46,15 @@ openssl rand -hex 32    # 生成一个密钥，例如 a1b2c3...
 
 ## 4. 在 CloudShell 安装并启动 agent
 
-CloudShell 控制台菜单 **Actions → Upload file**，上传两个文件：`bin/qcs-agent` 和 `infra/install-agent.sh`，然后：
+打开 CloudShell，粘贴一条命令（自动下载二进制、装到 `~/.qcs/`、途中提示你粘贴共享密钥）：
 
 ```bash
-bash install-agent.sh        # 安装到 ~/.qcs/，途中粘贴共享密钥
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | bash
+```
+
+装完启动：
+
+```bash
 qcs-start                    # 前台启动，所有收发交互实时显示在终端
 ```
 

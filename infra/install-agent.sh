@@ -2,26 +2,29 @@
 # qcs-bridge agent installer for AWS CloudShell.
 # Installs everything into ~/.qcs and wires up the `qcs-start` command.
 #
-# Usage (inside CloudShell, after uploading qcs-agent binary):
+# Network install (recommended, inside CloudShell):
+#   curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | bash
+# Local binary (if you uploaded qcs-agent yourself):
 #   bash install-agent.sh [path-to-qcs-agent-binary]
 set -euo pipefail
 
+RELEASE_BASE="https://github.com/aceaura/qcs-bridge/releases/download/v0.1.0"
 INSTALL_DIR="$HOME/.qcs"
 mkdir -p "$INSTALL_DIR"
 
-# --- 1. locate and install the binary ---
+# --- 1. locate and install the binary (or download it from the release) ---
 SRC="${1:-}"
 if [[ -z "$SRC" ]]; then
   for cand in "$HOME/qcs-agent" "$HOME/cloudshell_upload/qcs-agent" ./qcs-agent; do
     if [[ -f "$cand" ]]; then SRC="$cand"; break; fi
   done
 fi
-if [[ -z "$SRC" || ! -f "$SRC" ]]; then
-  echo "ERROR: qcs-agent binary not found. Upload it via CloudShell Actions -> Upload file,"
-  echo "or pass its path: bash install-agent.sh /path/to/qcs-agent"
-  exit 1
+if [[ -n "$SRC" && -f "$SRC" ]]; then
+  cp "$SRC" "$INSTALL_DIR/qcs-agent"
+else
+  echo "qcs-agent binary not found locally, downloading from GitHub release..."
+  curl -fSL -o "$INSTALL_DIR/qcs-agent" "$RELEASE_BASE/qcs-agent"
 fi
-cp "$SRC" "$INSTALL_DIR/qcs-agent"
 chmod +x "$INSTALL_DIR/qcs-agent"
 echo "[ok] binary installed: $INSTALL_DIR/qcs-agent"
 
