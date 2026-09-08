@@ -8,7 +8,7 @@
 #   bash install-agent.sh [path-to-qcs-agent-binary]
 set -euo pipefail
 
-RELEASE_BASE="https://github.com/aceaura/qcs-bridge/releases/download/v0.1.0"
+RELEASE_BASE="https://github.com/aceaura/qcs-bridge/releases/download/v0.2.0"
 INSTALL_DIR="$HOME/.qcs"
 mkdir -p "$INSTALL_DIR"
 
@@ -31,12 +31,10 @@ echo "[ok] binary installed: $INSTALL_DIR/qcs-agent"
 # --- 2. install the launcher ---
 cat > "$INSTALL_DIR/qcs-start" <<'LAUNCHER'
 #!/usr/bin/env bash
-# Starts qcs-agent. Foreground by default (live interaction display, Ctrl+C to stop).
+# Starts qcs-agent (config: ~/.qcs/config, secret: ~/.qcs-secret).
+# Foreground by default (live interaction display, Ctrl+C to stop).
 # qcs-start --background  -> run under nohup, follow with: tail -f ~/qcs-agent.log
 set -euo pipefail
-export QCS_CMD_QUEUE="${QCS_CMD_QUEUE:-qcs-commands.fifo}"
-export QCS_RESULT_QUEUE="${QCS_RESULT_QUEUE:-qcs-results.fifo}"
-export QCS_HEARTBEAT_QUEUE="${QCS_HEARTBEAT_QUEUE:-qcs-heartbeat.fifo}"
 
 if [[ "${1:-}" == "--background" || "${1:-}" == "-d" ]]; then
   pkill -f '.qcs/qcs-agent' 2>/dev/null || true
@@ -51,6 +49,22 @@ fi
 LAUNCHER
 chmod +x "$INSTALL_DIR/qcs-start"
 echo "[ok] launcher installed: $INSTALL_DIR/qcs-start"
+
+# --- 2b. config file (no env vars needed) ---
+if [[ ! -s "$INSTALL_DIR/config" ]]; then
+  REGION="$(aws configure get region 2>/dev/null || true)"
+  {
+    echo "# qcs-bridge agent config (env vars with the same names override these)"
+    echo "QCS_CMD_QUEUE=${QCS_CMD_QUEUE:-qcs-commands.fifo}"
+    echo "QCS_RESULT_QUEUE=${QCS_RESULT_QUEUE:-qcs-results.fifo}"
+    echo "QCS_HEARTBEAT_QUEUE=${QCS_HEARTBEAT_QUEUE:-qcs-heartbeat.fifo}"
+    [[ -n "$REGION" ]] && echo "AWS_REGION=$REGION"
+  } > "$INSTALL_DIR/config"
+  chmod 600 "$INSTALL_DIR/config"
+  echo "[ok] config written: $INSTALL_DIR/config"
+else
+  echo "[ok] config already present at $INSTALL_DIR/config"
+fi
 
 # --- 3. PATH ---
 if ! grep -q '.qcs' "$HOME/.bashrc" 2>/dev/null; then

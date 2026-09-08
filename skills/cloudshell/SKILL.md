@@ -36,6 +36,6 @@ description: 通过 qcs CLI 在 AWS CloudShell 环境里执行只读检测命令
 
 ## 故障排查
 
-- `config error: set QCS_CMD_QUEUE...` → 环境变量未配置，指引用户按 qcs-bridge README 安装小节第 5 步配置。
+- `config error: set QCS_CMD_QUEUE...` → 配置文件缺失，指引用户按 qcs-bridge README 安装小节第 3b 步创建 `~/.qcs/config`。
 - `exec error: timed out waiting for result` → agent 掉线或命令超时，先 `qcs status` 确认。
 - `access denied` 类 AWS 报错 → 本地 IAM 身份缺 SQS 权限，参考 README 安装小节第 2 步。

@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
+	qcsconfig "qcs-bridge/internal/config"
 	"qcs-bridge/internal/proto"
 )
 
@@ -29,15 +30,6 @@ type Bridge struct {
 	cmdQueue  string
 	resQueue  string
 	hbQueue   string
-}
-
-func getenv(keys ...string) string {
-	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func loadSecret() (string, error) {
@@ -70,15 +62,20 @@ func resolveQueueURL(ctx context.Context, client *sqs.Client, nameOrURL string) 
 	return *out.QueueUrl, nil
 }
 
-// New loads config from the environment and resolves queue URLs.
-// Required env: QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE (names or URLs),
-// plus a secret via QCS_SECRET / QCS_SECRET_FILE / ~/.qcs-secret and standard AWS credentials.
+// New loads config from the environment and/or ~/.qcs/config (env wins),
+// then resolves queue URLs.
+// Required: QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE (names or URLs),
+// plus a secret via QCS_SECRET / QCS_SECRET_FILE / ~/.qcs-secret and AWS credentials.
 func New(ctx context.Context) (*Bridge, error) {
-	cmdQueue := getenv("QCS_CMD_QUEUE")
-	resQueue := getenv("QCS_RESULT_QUEUE")
-	hbQueue := getenv("QCS_HEARTBEAT_QUEUE")
+	cfgFile, err := qcsconfig.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load config file: %w", err)
+	}
+	cmdQueue := cfgFile.Get("QCS_CMD_QUEUE")
+	resQueue := cfgFile.Get("QCS_RESULT_QUEUE")
+	hbQueue := cfgFile.Get("QCS_HEARTBEAT_QUEUE")
 	if cmdQueue == "" || resQueue == "" || hbQueue == "" {
-		return nil, errors.New("set QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE (names or URLs)")
+		return nil, fmt.Errorf("set QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE in env or %s (names or URLs)", qcsconfig.Path())
 	}
 	secret, err := loadSecret()
 	if err != nil {
@@ -89,14 +86,14 @@ func New(ctx context.Context) (*Bridge, error) {
 	// ignores static AWS_ACCESS_KEY_ID env vars that would otherwise shadow the
 	// profile's credentials.
 	loadOpts := []func(*config.LoadOptions) error{}
-	if profile := getenv("QCS_AWS_PROFILE", "AWS_PROFILE"); profile != "" {
+	if profile := cfgFile.Get("QCS_AWS_PROFILE", "AWS_PROFILE"); profile != "" {
 		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
 	}
-	cfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
+	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("aws config: %w", err)
 	}
-	sqsClient := sqs.NewFromConfig(cfg)
+	sqsClient := sqs.NewFromConfig(awsCfg)
 
 	b := &Bridge{sqsClient: sqsClient, secret: secret}
 	if b.cmdQueue, err = resolveQueueURL(ctx, sqsClient, cmdQueue); err != nil {

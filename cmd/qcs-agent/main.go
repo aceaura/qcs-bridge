@@ -23,19 +23,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	qcsconfig "qcs-bridge/internal/config"
 	"qcs-bridge/internal/proto"
 )
 
 const maxCmdTimeout = 300
-
-func getenv(keys ...string) string {
-	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
-			return v
-		}
-	}
-	return ""
-}
 
 func loadSecret() (string, error) {
 	if s := os.Getenv("QCS_SECRET"); s != "" {
@@ -260,11 +252,15 @@ func main() {
 	log.SetPrefix("[qcs-agent] ")
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 
-	cmdQueue := getenv("QCS_CMD_QUEUE")
-	resQueue := getenv("QCS_RESULT_QUEUE")
-	hbQueue := getenv("QCS_HEARTBEAT_QUEUE")
+	cfgFile, err := qcsconfig.Load()
+	if err != nil {
+		log.Fatalf("load config file: %v", err)
+	}
+	cmdQueue := cfgFile.Get("QCS_CMD_QUEUE")
+	resQueue := cfgFile.Get("QCS_RESULT_QUEUE")
+	hbQueue := cfgFile.Get("QCS_HEARTBEAT_QUEUE")
 	if cmdQueue == "" || resQueue == "" || hbQueue == "" {
-		log.Fatal("set QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE (names or URLs)")
+		log.Fatalf("set QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE in env or %s (names or URLs)", qcsconfig.Path())
 	}
 	secret, err := loadSecret()
 	if err != nil {

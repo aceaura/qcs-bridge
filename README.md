@@ -26,7 +26,19 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/creat
 **3. 共享密钥**（本地一次）：`openssl rand -hex 32` 生成，写入 `%USERPROFILE%\.qcs-secret`。
 CloudShell 侧在第 4 步由安装脚本提示粘贴。
 
-**4. CloudShell 安装 agent**（CloudShell 内一条命令，自动下载二进制、装到 `~/.qcs/`、配好 PATH）：
+**3b. 本地配置文件**（一次）：新建 `%USERPROFILE%\.qcs\config`，内容按需修改：
+
+```ini
+QCS_CMD_QUEUE=qcs-commands.fifo
+QCS_RESULT_QUEUE=qcs-results.fifo
+QCS_HEARTBEAT_QUEUE=qcs-heartbeat.fifo
+AWS_REGION=us-west-1
+QCS_AWS_PROFILE=<本地profile>
+```
+
+所有组件（qcs / qcs-mcp / qcs-agent）都会自动读这个文件；同名环境变量优先级更高，可留空不用。
+
+**4. CloudShell 安装 agent**（CloudShell 内一条命令，自动下载二进制、装到 `~/.qcs/`、写好 config、配好 PATH）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | bash
@@ -36,29 +48,18 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/insta
 
 **5. 本地客户端（二选一）**：
 
-- **MCP 模式** —— Qoder MCP 配置添加：
+- **MCP 模式** —— Qoder MCP 配置添加（配置走第 3b 步的文件，无需 env）：
   ```json
   {
     "mcpServers": {
       "qcs-bridge": {
-        "command": "W:\\QoderCN\\qcs-bridge\\bin\\qcs-mcp.exe",
-        "env": {
-          "QCS_CMD_QUEUE": "qcs-commands.fifo",
-          "QCS_RESULT_QUEUE": "qcs-results.fifo",
-          "QCS_HEARTBEAT_QUEUE": "qcs-heartbeat.fifo",
-          "AWS_REGION": "<你的region>",
-          "AWS_PROFILE": "<本地profile，用默认凭证可删>"
-        }
+        "command": "W:\\QoderCN\\qcs-bridge\\bin\\qcs-mcp.exe"
       }
     }
   }
   ```
-- **CLI + Skill 模式** —— 设环境变量后装 CLI 和技能：
+- **CLI + Skill 模式** —— 装 PATH 和技能（队列/region/profile 已在第 3b 步的文件里）：
   ```cmd
-  setx QCS_CMD_QUEUE qcs-commands.fifo
-  setx QCS_RESULT_QUEUE qcs-results.fifo
-  setx QCS_HEARTBEAT_QUEUE qcs-heartbeat.fifo
-  setx AWS_REGION <你的region>
   setx PATH "%PATH%;W:\QoderCN\qcs-bridge\bin"
   mkdir "%USERPROFILE%\.qoder-cn\skills\cloudshell" 2>nul
   copy skills\cloudshell\SKILL.md "%USERPROFILE%\.qoder-cn\skills\cloudshell\SKILL.md"
