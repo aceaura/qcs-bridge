@@ -60,8 +60,8 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/insta
   setx QCS_HEARTBEAT_QUEUE qcs-heartbeat.fifo
   setx AWS_REGION <你的region>
   setx PATH "%PATH%;W:\QoderCN\qcs-bridge\bin"
-  mkdir "%USERPROFILE%\.qoder-cn\skills\qcs-cloudshell" 2>nul
-  copy skills\qcs-cloudshell\SKILL.md "%USERPROFILE%\.qoder-cn\skills\qcs-cloudshell\SKILL.md"
+  mkdir "%USERPROFILE%\.qoder-cn\skills\cloudshell" 2>nul
+  copy skills\cloudshell\SKILL.md "%USERPROFILE%\.qoder-cn\skills\cloudshell\SKILL.md"
   ```
   （设完重开终端/Qoder 会话生效。）
 
@@ -77,7 +77,7 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/insta
 | `cmd/qcs` | 本地 Windows | CLI 模式，`qcs exec "cmd"` / `qcs status`，退出码透传远端 |
 | `internal/client` | 共享（本地） | qcs-mcp 与 qcs 共用的桥接客户端 |
 | `internal/proto` | 共享 | 消息格式、HMAC-SHA256 签名/验签、只读白名单、输出截断 |
-| `skills/qcs-cloudshell/SKILL.md` | Qoder 技能目录 | CLI 模式下教 Qoder 何时、如何用 `qcs` |
+| `skills/cloudshell/SKILL.md` | Qoder 技能目录 | CLI 模式下教 Qoder 何时、如何用 `qcs`（`/cloudshell`） |
 | `infra/` | 部署 | 建队列脚本、最小 IAM policy、CloudShell 安装脚本（装到 `~/.qcs/`，提供 `qcs-start`） |
 
 ## 安全设计

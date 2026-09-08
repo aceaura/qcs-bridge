@@ -1,9 +1,9 @@
 ---
-name: qcs-cloudshell
+name: cloudshell
 description: 通过 qcs CLI 在 AWS CloudShell 环境里执行只读检测命令（以 CloudShell 的 IAM 身份和网络位置）。当用户要求检查/巡检线上 AWS、EKS、kubectl 资源，或提到 CloudShell、qcs、qcs-bridge 时使用。
 ---
 
-# qcs-cloudshell
+# cloudshell
 
 本机装有 `qcs` CLI，它通过 SQS 桥接在 AWS CloudShell 内执行命令（CloudShell 侧由 qcs-agent 常驻进程执行）。
 
