@@ -65,11 +65,13 @@ func New(ctx context.Context) (*Bridge, error) {
 	if profile := cfgFile.Get("QCS_AWS_PROFILE", "AWS_PROFILE"); profile != "" {
 		loadOpts = append(loadOpts, config.WithSharedConfigProfile(profile))
 	}
-	// An explicit region always wins; otherwise the secret token carries it.
-	if region := cfgFile.Get("AWS_REGION", "AWS_DEFAULT_REGION"); region != "" {
+	// The secret token's region is authoritative (see config.ResolveRegion).
+	region := qcsconfig.ResolveRegion(secret, cfgFile)
+	if err := qcsconfig.PinRegion(region); err != nil {
+		return nil, fmt.Errorf("pin region: %w", err)
+	}
+	if region != "" {
 		loadOpts = append(loadOpts, config.WithRegion(region))
-	} else if secret.Region != "" {
-		loadOpts = append(loadOpts, config.WithRegion(secret.Region))
 	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {

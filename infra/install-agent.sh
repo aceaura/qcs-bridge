@@ -8,7 +8,7 @@
 #   bash install-agent.sh [path-to-qcs-agent-binary]
 set -euo pipefail
 
-RELEASE_BASE="https://github.com/aceaura/qcs-bridge/releases/download/v0.3.0"
+RELEASE_BASE="https://github.com/aceaura/qcs-bridge/releases/download/v0.4.0"
 INSTALL_DIR="$HOME/.qcs"
 mkdir -p "$INSTALL_DIR"
 

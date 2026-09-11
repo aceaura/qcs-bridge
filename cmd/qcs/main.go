@@ -95,10 +95,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "config error:", err)
 			os.Exit(2)
 		}
-		region := cfgFile.Get("AWS_REGION", "AWS_DEFAULT_REGION")
-		if region == "" {
-			region = secret.Region
-		}
+		region := qcsconfig.ResolveRegion(secret, cfgFile)
 		if region == "" {
 			fmt.Fprintf(os.Stderr, "no region known: set AWS_REGION in %s\n", qcsconfig.Path())
 			os.Exit(2)

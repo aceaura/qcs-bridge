@@ -41,6 +41,32 @@ func FormatToken(region, secret string) string {
 	return TokenPrefix + region + ":" + secret
 }
 
+// ResolveRegion returns the region qcs-bridge must operate in.
+//
+// A region carried by the secret token wins over AWS_REGION and the config
+// file: the secret is issued for one region's queues, so an unrelated region
+// in the ambient environment (CloudShell exports the region of whichever
+// session you happened to open) would only surface as NonExistentQueue.
+func ResolveRegion(s Secret, f File) string {
+	if s.Region != "" {
+		return s.Region
+	}
+	return f.Get("AWS_REGION", "AWS_DEFAULT_REGION")
+}
+
+// PinRegion fixes the region for this process and everything it spawns by
+// overwriting the AWS region environment variables, so an aws CLI invoked by a
+// remote command cannot disagree with the region the bridge is talking to.
+func PinRegion(region string) error {
+	if region == "" {
+		return nil
+	}
+	if err := os.Setenv("AWS_REGION", region); err != nil {
+		return err
+	}
+	return os.Setenv("AWS_DEFAULT_REGION", region)
+}
+
 // SecretPath returns the secret file location.
 func SecretPath() string {
 	if f := os.Getenv("QCS_SECRET_FILE"); f != "" {

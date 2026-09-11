@@ -45,8 +45,14 @@ AWS profile 或改队列名时才建 `%USERPROFILE%\.qcs\config`：
 QCS_AWS_PROFILE=<本地profile>
 ```
 
-所有组件（qcs / qcs-mcp / qcs-agent）都会自动读这个文件；同名环境变量优先级最高，
-其次是本文件的 `AWS_REGION`，最后才是 token 里的区域。
+所有组件（qcs / qcs-mcp / qcs-agent）都会自动读这个文件；队列名、profile 等设置是
+同名环境变量优先、其次本文件。
+
+**区域是例外**：token 里带的区域权威最高，会盖掉环境变量和本文件的 `AWS_REGION`，
+并被写进进程自身的环境（`AWS_REGION` / `AWS_DEFAULT_REGION`），所以 agent 执行的
+`aws` 命令也一定在同一个区。密钥本来就是为某一个区的队列签发的，而 CloudShell 总会
+把当前会话所在区导成 `AWS_REGION`——换个区开 CloudShell 就会拿错区去找队列，只能看到
+一句 `NonExistentQueue`。只有裸 hex 密钥（不带区域）时才回退到环境变量和本文件。
 
 **4. CloudShell 安装 agent**（CloudShell 内一条命令，自动下载二进制、装到 `~/.qcs/`、写好 config、配好 PATH）：
 

@@ -248,12 +248,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// An explicit region always wins; otherwise the secret token carries it.
+	// The secret token's region is authoritative; pinning it into the
+	// environment means the aws CLI in executed commands agrees with us.
+	region := qcsconfig.ResolveRegion(secret, cfgFile)
+	if err := qcsconfig.PinRegion(region); err != nil {
+		log.Fatalf("pin region: %v", err)
+	}
 	loadOpts := []func(*config.LoadOptions) error{}
-	if region := cfgFile.Get("AWS_REGION", "AWS_DEFAULT_REGION"); region != "" {
+	if region != "" {
 		loadOpts = append(loadOpts, config.WithRegion(region))
-	} else if secret.Region != "" {
-		loadOpts = append(loadOpts, config.WithRegion(secret.Region))
 	}
 	cfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
@@ -306,7 +309,7 @@ func main() {
 	if !a.readOnly {
 		mode = "ALLOW-ALL (dangerous)"
 	}
-	a.auditf("START identity=%s host=%s mode=%s", identity, hostname, mode)
+	a.auditf("START identity=%s host=%s region=%s mode=%s", identity, hostname, region, mode)
 
 	go a.runHeartbeatLoop(ctx)
 
