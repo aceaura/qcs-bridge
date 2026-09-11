@@ -23,20 +23,30 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/creat
 **2. 授权**（一次）：把 `infra/iam-policy-qcs-bridge.json` 里的 `REGION`/`ACCOUNT_ID` 替换后，
 作为 inline policy 挂到两个身份：本地 IAM 身份（只需 SQS 权限，不需要 EKS）和 CloudShell 身份。
 
-**3. 共享密钥**（本地一次）：`openssl rand -hex 32` 生成，写入 `%USERPROFILE%\.qcs-secret`。
-CloudShell 侧在第 4 步由安装脚本提示粘贴。
+**3. 共享密钥**（本地一次）：推荐用**自带区域的 token** 形式，这样别的机器只配这一个值就够了：
 
-**3b. 本地配置文件**（一次）：新建 `%USERPROFILE%\.qcs\config`，内容按需修改：
+```bash
+echo "qcs1:<你的region>:$(openssl rand -hex 32)" > "$USERPROFILE/.qcs-secret"
+```
+
+得到形如 `qcs1:us-west-1:3f9a…` 的字符串。已经装好的机器上可以随时打印它，拿去配新机器：
+
+```bash
+qcs token
+```
+
+纯 hex 的旧格式密钥继续可用，只是那样就得另外告诉每台机器区域。
+
+**3b. 本地配置文件**（可选）：队列名有默认值（`qcs-commands.fifo` / `qcs-results.fifo` /
+`qcs-heartbeat.fifo`），区域由 token 提供，所以通常**不需要**这个文件。只有要指定本地
+AWS profile 或改队列名时才建 `%USERPROFILE%\.qcs\config`：
 
 ```ini
-QCS_CMD_QUEUE=qcs-commands.fifo
-QCS_RESULT_QUEUE=qcs-results.fifo
-QCS_HEARTBEAT_QUEUE=qcs-heartbeat.fifo
-AWS_REGION=us-west-1
 QCS_AWS_PROFILE=<本地profile>
 ```
 
-所有组件（qcs / qcs-mcp / qcs-agent）都会自动读这个文件；同名环境变量优先级更高，可留空不用。
+所有组件（qcs / qcs-mcp / qcs-agent）都会自动读这个文件；同名环境变量优先级最高，
+其次是本文件的 `AWS_REGION`，最后才是 token 里的区域。
 
 **4. CloudShell 安装 agent**（CloudShell 内一条命令，自动下载二进制、装到 `~/.qcs/`、写好 config、配好 PATH）：
 
@@ -44,11 +54,14 @@ QCS_AWS_PROFILE=<本地profile>
 curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | bash
 ```
 
-脚本会提示粘贴第 3 步的密钥（输入不回显）。想一条命令免交互，把密钥预置进去：
+脚本会提示粘贴第 3 步的 token（输入不回显）。想一条命令免交互，直接预置：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | QCS_SECRET=<密钥> bash
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | QCS_SECRET=qcs1:<region>:<secret> bash
 ```
+
+token 里已经带了区域，所以这一条命令就是全部配置，不用再管 `AWS_REGION` 和队列名。
+（这也适用于任何 Linux 机器，不限于 CloudShell——但非 CloudShell 机器需要自备能访问队列的 AWS 凭证。）
 
 脚本会把 `qcs-start` 链接到已在 PATH 上的目录（优先 `~/.local/bin`），装完当前 shell 直接可用，无需重开终端。之后启动只需敲 `qcs-start`（前台，所有收发交互实时滚屏；`qcs-start --background` 挂后台，`tail -f ~/qcs-agent.log` 观察）。
 

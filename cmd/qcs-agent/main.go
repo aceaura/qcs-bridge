@@ -29,25 +29,6 @@ import (
 
 const maxCmdTimeout = 300
 
-func loadSecret() (string, error) {
-	if s := os.Getenv("QCS_SECRET"); s != "" {
-		return s, nil
-	}
-	if f := os.Getenv("QCS_SECRET_FILE"); f != "" {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			return "", err
-		}
-		return strings.TrimSpace(string(b)), nil
-	}
-	home, _ := os.UserHomeDir()
-	b, err := os.ReadFile(filepath.Join(home, ".qcs-secret"))
-	if err != nil {
-		return "", errors.New("no secret found: set QCS_SECRET, QCS_SECRET_FILE, or ~/.qcs-secret")
-	}
-	return strings.TrimSpace(string(b)), nil
-}
-
 func resolveQueueURL(ctx context.Context, client *sqs.Client, nameOrURL string) (string, error) {
 	if strings.HasPrefix(nameOrURL, "https://") {
 		return nameOrURL, nil
@@ -256,13 +237,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config file: %v", err)
 	}
-	cmdQueue := cfgFile.Get("QCS_CMD_QUEUE")
-	resQueue := cfgFile.Get("QCS_RESULT_QUEUE")
-	hbQueue := cfgFile.Get("QCS_HEARTBEAT_QUEUE")
-	if cmdQueue == "" || resQueue == "" || hbQueue == "" {
-		log.Fatalf("set QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE in env or %s (names or URLs)", qcsconfig.Path())
-	}
-	secret, err := loadSecret()
+	cmdQueue := cfgFile.GetOr(qcsconfig.DefaultCmdQueue, "QCS_CMD_QUEUE")
+	resQueue := cfgFile.GetOr(qcsconfig.DefaultResultQueue, "QCS_RESULT_QUEUE")
+	hbQueue := cfgFile.GetOr(qcsconfig.DefaultHeartbeatQueue, "QCS_HEARTBEAT_QUEUE")
+	secret, err := qcsconfig.LoadSecret()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -270,7 +248,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := config.LoadDefaultConfig(ctx)
+	// An explicit region always wins; otherwise the secret token carries it.
+	loadOpts := []func(*config.LoadOptions) error{}
+	if region := cfgFile.Get("AWS_REGION", "AWS_DEFAULT_REGION"); region != "" {
+		loadOpts = append(loadOpts, config.WithRegion(region))
+	} else if secret.Region != "" {
+		loadOpts = append(loadOpts, config.WithRegion(secret.Region))
+	}
+	cfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		log.Fatalf("aws config: %v", err)
 	}
@@ -296,7 +281,7 @@ func main() {
 
 	a := &agent{
 		sqsClient: sqsClient,
-		secret:    secret,
+		secret:    secret.Value,
 		identity:  identity,
 		hostname:  hostname,
 		started:   time.Now(),

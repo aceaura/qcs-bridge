@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"qcs-bridge/internal/client"
+	qcsconfig "qcs-bridge/internal/config"
 )
 
 const usage = `qcs — Qoder ⇄ CloudShell bridge CLI
@@ -23,11 +24,16 @@ const usage = `qcs — Qoder ⇄ CloudShell bridge CLI
 Usage:
   qcs status                      Show agent liveness (last heartbeat, identity, uptime)
   qcs exec [-timeout N] <cmd...>  Run a command in CloudShell, print stdout/stderr, exit with remote exit code
+  qcs token                       Print the qcs1:<region>:<secret> token to set up another machine
 
-Config (environment):
-  QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE   Queue names or URLs (required)
-  QCS_SECRET | QCS_SECRET_FILE | ~/.qcs-secret           Shared HMAC secret (required)
-  AWS_REGION, AWS_PROFILE, ...                           Standard AWS SDK credential chain
+Config (environment, or ~/.qcs/config as KEY=VALUE; env wins):
+  QCS_SECRET | QCS_SECRET_FILE | ~/.qcs-secret           Shared secret (required). A
+                                                         qcs1:<region>:<secret> token also
+                                                         supplies the region.
+  AWS_REGION                                             Region of the queues (optional if the
+                                                         secret is a token)
+  QCS_CMD_QUEUE, QCS_RESULT_QUEUE, QCS_HEARTBEAT_QUEUE   Queue names or URLs (default: qcs-*.fifo)
+  AWS_PROFILE / QCS_AWS_PROFILE, ...                     Standard AWS SDK credential chain
 `
 
 func main() {
@@ -77,6 +83,27 @@ func main() {
 		if exitCode != 0 {
 			os.Exit(exitCode)
 		}
+
+	case "token":
+		cfgFile, err := qcsconfig.Load()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "config error:", err)
+			os.Exit(2)
+		}
+		secret, err := qcsconfig.LoadSecret()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "config error:", err)
+			os.Exit(2)
+		}
+		region := cfgFile.Get("AWS_REGION", "AWS_DEFAULT_REGION")
+		if region == "" {
+			region = secret.Region
+		}
+		if region == "" {
+			fmt.Fprintf(os.Stderr, "no region known: set AWS_REGION in %s\n", qcsconfig.Path())
+			os.Exit(2)
+		}
+		fmt.Println(qcsconfig.FormatToken(region, secret.Value))
 
 	case "-h", "--help", "help":
 		fmt.Print(usage)

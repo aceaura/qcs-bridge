@@ -8,7 +8,7 @@
 #   bash install-agent.sh [path-to-qcs-agent-binary]
 set -euo pipefail
 
-RELEASE_BASE="https://github.com/aceaura/qcs-bridge/releases/download/v0.2.0"
+RELEASE_BASE="https://github.com/aceaura/qcs-bridge/releases/download/v0.3.0"
 INSTALL_DIR="$HOME/.qcs"
 mkdir -p "$INSTALL_DIR"
 
@@ -50,22 +50,6 @@ LAUNCHER
 chmod +x "$INSTALL_DIR/qcs-start"
 echo "[ok] launcher installed: $INSTALL_DIR/qcs-start"
 
-# --- 2b. config file (no env vars needed) ---
-if [[ ! -s "$INSTALL_DIR/config" ]]; then
-  REGION="$(aws configure get region 2>/dev/null || true)"
-  {
-    echo "# qcs-bridge agent config (env vars with the same names override these)"
-    echo "QCS_CMD_QUEUE=${QCS_CMD_QUEUE:-qcs-commands.fifo}"
-    echo "QCS_RESULT_QUEUE=${QCS_RESULT_QUEUE:-qcs-results.fifo}"
-    echo "QCS_HEARTBEAT_QUEUE=${QCS_HEARTBEAT_QUEUE:-qcs-heartbeat.fifo}"
-    [[ -n "$REGION" ]] && echo "AWS_REGION=$REGION"
-  } > "$INSTALL_DIR/config"
-  chmod 600 "$INSTALL_DIR/config"
-  echo "[ok] config written: $INSTALL_DIR/config"
-else
-  echo "[ok] config already present at $INSTALL_DIR/config"
-fi
-
 # --- 3. make qcs-start reachable from the shell that ran this script ---
 # A PATH export here would die with this subshell, so link the launcher into a
 # directory that is already on the caller's PATH.
@@ -86,12 +70,14 @@ else
   mkdir -p "$HOME/.local/bin"
   ln -sf "$INSTALL_DIR/qcs-start" "$HOME/.local/bin/qcs-start"
   ln -sf "$INSTALL_DIR/qcs-agent" "$HOME/.local/bin/qcs-agent"
-  for rc in "$HOME/.bashrc" "$HOME/.profile"; do
+  TOUCHED=""
+  for rc in "$HOME/.bashrc" "$HOME/.profile" "$HOME/.zshrc" "$HOME/.zprofile"; do
     if [[ -f "$rc" ]] && ! grep -q '.local/bin' "$rc" 2>/dev/null; then
       echo 'export PATH="$HOME/.local/bin:$PATH"  # qcs-bridge' >> "$rc"
+      TOUCHED="$TOUCHED $(basename "$rc")"
     fi
   done
-  echo "[ok] linked qcs-start into ~/.local/bin and added it to PATH in ~/.bashrc / ~/.profile"
+  echo "[ok] linked qcs-start into ~/.local/bin; PATH added to:${TOUCHED:- (none needed)}"
   NEEDS_PATH_EXPORT=1
 fi
 
@@ -102,7 +88,8 @@ if [[ ! -s "$HOME/.qcs-secret" ]]; then
     # Under `curl ... | bash` stdin is the pipe, so read must come from the terminal.
     if [[ -r /dev/tty ]]; then
       echo
-      echo "Shared HMAC secret not found. Paste the secret (same one as your local machine):"
+      echo "Secret not found. Paste it (from your local machine — a qcs1:<region>:<secret>"
+      echo "token also configures the region, so nothing else is needed):"
       read -rs -p "secret: " SECRET < /dev/tty
       echo
     fi
@@ -123,7 +110,36 @@ if [[ ! -s "$HOME/.qcs-secret" ]]; then
   chmod 600 "$HOME/.qcs-secret"
   echo "[ok] secret saved to ~/.qcs-secret"
 else
+  SECRET="$(cat "$HOME/.qcs-secret")"
   echo "[ok] secret already present at ~/.qcs-secret"
+fi
+
+# --- 5. config file (only for what the secret does not already carry) ---
+TOKEN_REGION=""
+if [[ "$SECRET" == qcs1:* ]]; then
+  TOKEN_REGION="${SECRET#qcs1:}"
+  TOKEN_REGION="${TOKEN_REGION%%:*}"
+fi
+
+if [[ ! -s "$INSTALL_DIR/config" ]]; then
+  if [[ -n "$TOKEN_REGION" ]]; then
+    echo "# qcs-bridge agent config (region comes from the secret token)" > "$INSTALL_DIR/config"
+    echo "[ok] config written: $INSTALL_DIR/config (region $TOKEN_REGION from token)"
+  else
+    REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || true)}"
+    {
+      echo "# qcs-bridge agent config (env vars with the same names override these)"
+      [[ -n "$REGION" ]] && echo "AWS_REGION=$REGION"
+    } > "$INSTALL_DIR/config"
+    if [[ -n "$REGION" ]]; then
+      echo "[ok] config written: $INSTALL_DIR/config (region $REGION)"
+    else
+      echo "[warn] no region known — set AWS_REGION in $INSTALL_DIR/config, or reinstall with a qcs1:<region>:<secret> token"
+    fi
+  fi
+  chmod 600 "$INSTALL_DIR/config"
+else
+  echo "[ok] config already present at $INSTALL_DIR/config"
 fi
 
 echo

@@ -45,6 +45,13 @@ func Load() (File, error) {
 	return f, nil
 }
 
+// Default queue names, used when nothing is configured.
+const (
+	DefaultCmdQueue       = "qcs-commands.fifo"
+	DefaultResultQueue    = "qcs-results.fifo"
+	DefaultHeartbeatQueue = "qcs-heartbeat.fifo"
+)
+
 // Get returns the first non-empty value for keys: environment first, then file.
 func (f File) Get(keys ...string) string {
 	for _, k := range keys {
@@ -58,4 +65,12 @@ func (f File) Get(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// GetOr is Get with a fallback when nothing is configured.
+func (f File) GetOr(def string, keys ...string) string {
+	if v := f.Get(keys...); v != "" {
+		return v
+	}
+	return def
 }
