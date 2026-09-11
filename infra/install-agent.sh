@@ -66,12 +66,34 @@ else
   echo "[ok] config already present at $INSTALL_DIR/config"
 fi
 
-# --- 3. PATH ---
-if ! grep -q '.qcs' "$HOME/.bashrc" 2>/dev/null; then
-  echo 'export PATH="$HOME/.qcs:$PATH"' >> "$HOME/.bashrc"
-  echo "[ok] added ~/.qcs to PATH in ~/.bashrc"
+# --- 3. make qcs-start reachable from the shell that ran this script ---
+# A PATH export here would die with this subshell, so link the launcher into a
+# directory that is already on the caller's PATH.
+on_path() {
+  case ":$PATH:" in *":$1:"*) return 0 ;; *) return 1 ;; esac
+}
+
+LINK_DIR=""
+for d in "$HOME/.local/bin" "$HOME/bin" /usr/local/bin; do
+  if on_path "$d" && [[ -d "$d" && -w "$d" ]]; then LINK_DIR="$d"; break; fi
+done
+
+if [[ -n "$LINK_DIR" ]]; then
+  ln -sf "$INSTALL_DIR/qcs-start" "$LINK_DIR/qcs-start"
+  ln -sf "$INSTALL_DIR/qcs-agent" "$LINK_DIR/qcs-agent"
+  echo "[ok] linked qcs-start into $LINK_DIR (already on PATH)"
+else
+  mkdir -p "$HOME/.local/bin"
+  ln -sf "$INSTALL_DIR/qcs-start" "$HOME/.local/bin/qcs-start"
+  ln -sf "$INSTALL_DIR/qcs-agent" "$HOME/.local/bin/qcs-agent"
+  for rc in "$HOME/.bashrc" "$HOME/.profile"; do
+    if [[ -f "$rc" ]] && ! grep -q '.local/bin' "$rc" 2>/dev/null; then
+      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+    fi
+  done
+  echo "[ok] linked qcs-start into ~/.local/bin and added it to PATH in ~/.bashrc / ~/.profile"
+  NEEDS_PATH_EXPORT=1
 fi
-export PATH="$HOME/.qcs:$PATH"
 
 # --- 4. shared secret ---
 if [[ ! -s "$HOME/.qcs-secret" ]]; then
@@ -105,8 +127,12 @@ else
 fi
 
 echo
-echo "Install complete. Start the agent any time with:"
+echo "Install complete. Start the agent with:"
 echo
-echo "    qcs-start"
-echo
-echo "(new shells will have it on PATH; in this shell run: export PATH=\"\$HOME/.qcs:\$PATH\")"
+if [[ "${NEEDS_PATH_EXPORT:-}" == "1" ]]; then
+  echo "    export PATH=\"\$HOME/.local/bin:\$PATH\" && qcs-start"
+  echo
+  echo "(new shells pick this up automatically; the export is only needed in this one)"
+else
+  echo "    qcs-start"
+fi

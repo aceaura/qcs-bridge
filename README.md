@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/insta
 curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | QCS_SECRET=<密钥> bash
 ```
 
-之后启动只需敲 `qcs-start`（前台，所有收发交互实时滚屏；`qcs-start --background` 挂后台，`tail -f ~/qcs-agent.log` 观察）。
+脚本会把 `qcs-start` 链接到已在 PATH 上的目录（优先 `~/.local/bin`），装完当前 shell 直接可用，无需重开终端。之后启动只需敲 `qcs-start`（前台，所有收发交互实时滚屏；`qcs-start --background` 挂后台，`tail -f ~/qcs-agent.log` 观察）。
 
 **5. 本地客户端（二选一）**：
 
