@@ -34,17 +34,31 @@ cat > "$INSTALL_DIR/qcs-start" <<'LAUNCHER'
 # Starts qcs-agent (config: ~/.qcs/config, secret: ~/.qcs-secret).
 # Foreground by default (live interaction display, Ctrl+C to stop).
 # qcs-start --background  -> run under nohup, follow with: tail -f ~/qcs-agent.log
+#
+# --background/-d is consumed here; every other argument is forwarded to the
+# agent binary (e.g. qcs-start --allow-all, qcs-start -d --allow-all).
 set -euo pipefail
 
-if [[ "${1:-}" == "--background" || "${1:-}" == "-d" ]]; then
+BACKGROUND=0
+AGENT_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --background|-d) BACKGROUND=1 ;;
+    *) AGENT_ARGS+=("$arg") ;;
+  esac
+done
+# bash 4.2 treats "${AGENT_ARGS[@]}" as unset under `set -u`; this form is safe.
+set -- ${AGENT_ARGS[@]+"${AGENT_ARGS[@]}"}
+
+if [[ "$BACKGROUND" == "1" ]]; then
   pkill -f '.qcs/qcs-agent' 2>/dev/null || true
-  nohup "$HOME/.qcs/qcs-agent" >> "$HOME/qcs-agent.log" 2>&1 &
+  nohup "$HOME/.qcs/qcs-agent" "$@" >> "$HOME/qcs-agent.log" 2>&1 &
   echo "qcs-agent started in background (pid $!)"
   echo "watch live: tail -f ~/qcs-agent.log    audit: ~/qcs-audit.log"
 else
   echo "qcs-agent starting in foreground — every command and its full output will show below."
   echo "Ctrl+C to stop. (For background mode: qcs-start --background)"
-  exec "$HOME/.qcs/qcs-agent"
+  exec "$HOME/.qcs/qcs-agent" "$@"
 fi
 LAUNCHER
 chmod +x "$INSTALL_DIR/qcs-start"
