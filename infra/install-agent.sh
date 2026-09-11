@@ -75,12 +75,27 @@ export PATH="$HOME/.qcs:$PATH"
 
 # --- 4. shared secret ---
 if [[ ! -s "$HOME/.qcs-secret" ]]; then
-  echo
-  echo "Shared HMAC secret not found. Paste the secret (same one as your local machine):"
-  read -rs -p "secret: " SECRET
-  echo
+  SECRET="${QCS_SECRET:-}"
   if [[ -z "$SECRET" ]]; then
-    echo "ERROR: empty secret"; exit 1
+    # Under `curl ... | bash` stdin is the pipe, so read must come from the terminal.
+    if [[ -r /dev/tty ]]; then
+      echo
+      echo "Shared HMAC secret not found. Paste the secret (same one as your local machine):"
+      read -rs -p "secret: " SECRET < /dev/tty
+      echo
+    fi
+  fi
+  if [[ -z "$SECRET" ]]; then
+    echo
+    echo "ERROR: no secret provided. Either re-run with the secret pre-set:"
+    echo
+    echo "    curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | QCS_SECRET=<secret> bash"
+    echo
+    echo "or write it manually and start the agent:"
+    echo
+    echo "    printf '%s' '<secret>' > ~/.qcs-secret && chmod 600 ~/.qcs-secret && qcs-start"
+    echo
+    exit 1
   fi
   printf '%s' "$SECRET" > "$HOME/.qcs-secret"
   chmod 600 "$HOME/.qcs-secret"

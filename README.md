@@ -44,6 +44,12 @@ QCS_AWS_PROFILE=<本地profile>
 curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | bash
 ```
 
+脚本会提示粘贴第 3 步的密钥（输入不回显）。想一条命令免交互，把密钥预置进去：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/install-agent.sh | QCS_SECRET=<密钥> bash
+```
+
 之后启动只需敲 `qcs-start`（前台，所有收发交互实时滚屏；`qcs-start --background` 挂后台，`tail -f ~/qcs-agent.log` 观察）。
 
 **5. 本地客户端（二选一）**：
