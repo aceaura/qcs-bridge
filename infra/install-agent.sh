@@ -88,7 +88,7 @@ else
   ln -sf "$INSTALL_DIR/qcs-agent" "$HOME/.local/bin/qcs-agent"
   for rc in "$HOME/.bashrc" "$HOME/.profile"; do
     if [[ -f "$rc" ]] && ! grep -q '.local/bin' "$rc" 2>/dev/null; then
-      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+      echo 'export PATH="$HOME/.local/bin:$PATH"  # qcs-bridge' >> "$rc"
     fi
   done
   echo "[ok] linked qcs-start into ~/.local/bin and added it to PATH in ~/.bashrc / ~/.profile"

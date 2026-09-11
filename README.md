@@ -52,6 +52,14 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/insta
 
 脚本会把 `qcs-start` 链接到已在 PATH 上的目录（优先 `~/.local/bin`），装完当前 shell 直接可用，无需重开终端。之后启动只需敲 `qcs-start`（前台，所有收发交互实时滚屏；`qcs-start --background` 挂后台，`tail -f ~/qcs-agent.log` 观察）。
 
+要卸掉 agent（停进程、删软链、删 `~/.qcs/`、清掉自己写进 rc 的那行 PATH）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/uninstall-agent.sh | bash
+```
+
+密钥 `~/.qcs-secret` 默认保留方便重装，加 `--purge` 一并删除（管道模式：`... | bash -s -- --purge`）。
+
 **5. 本地客户端（二选一）**：
 
 - **MCP 模式** —— Qoder MCP 配置添加（配置走第 3b 步的文件，无需 env）：
@@ -85,7 +93,7 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/insta
 | `internal/client` | 共享（本地） | qcs-mcp 与 qcs 共用的桥接客户端 |
 | `internal/proto` | 共享 | 消息格式、HMAC-SHA256 签名/验签、只读白名单、输出截断 |
 | `skills/cloudshell/SKILL.md` | Qoder 技能目录 | CLI 模式下教 Qoder 何时、如何用 `qcs`（`/cloudshell`） |
-| `infra/` | 部署 | 建队列脚本、最小 IAM policy、CloudShell 安装脚本（装到 `~/.qcs/`，提供 `qcs-start`） |
+| `infra/` | 部署 | 建队列脚本、最小 IAM policy、CloudShell 安装/卸载脚本（装到 `~/.qcs/`，提供 `qcs-start`） |
 
 ## 安全设计
 
