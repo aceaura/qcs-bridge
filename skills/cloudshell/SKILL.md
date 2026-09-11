@@ -1,6 +1,6 @@
 ---
 name: cloudshell
-description: 通过 qcs CLI 在 AWS CloudShell 环境里执行只读检测命令（以 CloudShell 的 IAM 身份和网络位置）。当用户要求检查/巡检线上 AWS、EKS、kubectl 资源，或提到 CloudShell、qcs、qcs-bridge 时使用。
+description: 通过 qcs CLI 在 AWS CloudShell 环境里执行命令（以 CloudShell 的 IAM 身份和网络位置）。当用户要求检查线上 AWS、EKS、kubectl 资源，或需要在 CloudShell 里执行命令，或提到 CloudShell、qcs、qcs-bridge 时使用。
 ---
 
 # cloudshell
@@ -15,9 +15,9 @@ description: 通过 qcs CLI 在 AWS CloudShell 环境里执行只读检测命令
    qcs status
    ```
 
-   输出 `ONLINE` 才能继续。若显示 `OFFLINE` 或 `STALE`，告知用户：CloudShell 的 VM 已被回收（空闲约 20-30 分钟自动回收），请重新打开 CloudShell 并运行 `qcs-start`（或后台模式 `qcs-start --background`），然后重试。**不要**反复重试 exec。
+   输出 `ONLINE` 即可继续。`STALE` 只说明心跳停了，**不等于 agent 已死**（心跳线程挂掉时命令通道仍可正常工作）——此时先发一条 exec 验证，能返回就继续。若为 `OFFLINE`，或 `STALE` 下 exec 也超时，告知用户：CloudShell 的 VM 可能已被回收（空闲约 20-30 分钟自动回收），请重新打开 CloudShell 并运行 `qcs-start`（或后台模式 `qcs-start --background`），然后重试。**不要**反复重试 exec。
 
-2. **执行检测命令**：
+2. **执行命令**：
 
    ```bash
    qcs exec "kubectl get pods -A"
@@ -29,10 +29,11 @@ description: 通过 qcs CLI 在 AWS CloudShell 环境里执行只读检测命令
 
 ## 限制（务必遵守）
 
-- agent 默认**只读白名单**模式：只允许 `kubectl get/describe/logs/top`、`aws * describe/list/get/ls/query/...`、基础诊断命令（ping/dig/df/cat 等）。含 `; & | < > $ \` ( )` 或换行的命令会被拒。被拒时**不要尝试绕过**——向用户说明该命令不在只读白名单内，需要用户在 CloudShell 里手动执行，或明确授权后重启 agent 时加 `--allow-all`。
+- 该通道当前以 `--allow-all` 运行：**任意命令都会被真实执行**，没有白名单拦截。命令以 CloudShell 的普通用户身份执行（该用户在 `sudo` 组内）。
+- 只读查询可以直接执行。**变更类或破坏性操作（写入、删除、部署、改权限、改配置）必须先向用户说明影响并取得确认**，不要自行执行。
+- agent 也可能被重启回只读白名单模式（不带 `--allow-all`）。此时不在白名单内的命令、以及含 `; & | < > $ \` ( )` 或换行的命令会被拒；被拒时**不要尝试绕过**，向用户说明并让其决定是手动执行还是放开模式。
 - 单次输出上限 ~200KB，超出会被截断（输出中标注 `[truncated]`）；需要大输出时改用更窄的过滤条件重试。
 - 端到端延迟约 1-3 秒，超时上限 300 秒。
-- 该通道用于**检测/巡检**，不要用它做任何变更类操作。
 
 ## 故障排查
 
