@@ -19,13 +19,18 @@ if [[ -z "$SRC" ]]; then
     if [[ -f "$cand" ]]; then SRC="$cand"; break; fi
   done
 fi
+# Writing straight to the destination fails with ETXTBSY while the agent is
+# running (curl exits 23, cp says "Text file busy"). Rename is safe: the live
+# process keeps the old inode until it exits.
+TMP_BIN="$INSTALL_DIR/.qcs-agent.new"
 if [[ -n "$SRC" && -f "$SRC" ]]; then
-  cp "$SRC" "$INSTALL_DIR/qcs-agent"
+  cp "$SRC" "$TMP_BIN"
 else
   echo "qcs-agent binary not found locally, downloading from GitHub release..."
-  curl -fSL -o "$INSTALL_DIR/qcs-agent" "$RELEASE_BASE/qcs-agent"
+  curl -fSL -o "$TMP_BIN" "$RELEASE_BASE/qcs-agent"
 fi
-chmod +x "$INSTALL_DIR/qcs-agent"
+chmod +x "$TMP_BIN"
+mv -f "$TMP_BIN" "$INSTALL_DIR/qcs-agent"
 echo "[ok] binary installed: $INSTALL_DIR/qcs-agent"
 
 # --- 2. install the launcher ---
