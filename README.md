@@ -102,6 +102,35 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/unins
 **6. 验证**：Qoder 里说"用 cloudshell_status / qcs status 看看桥在不在"，返回 `ONLINE` 即完成；
 `OFFLINE` 说明 CloudShell 的 VM 被回收，重开 CloudShell 运行 `qcs-start`。
 
+## 容器方式跑 agent（替代 CloudShell）
+
+根目录 `Dockerfile` 把 agent 打成镜像。镜像里带了 `aws` v2、`kubectl` 以及
+`curl`/`ping`/`dig`/`traceroute` 等只读白名单放行的命令——agent 是用 `bash -c` 执行远端
+命令的，缺了这些就只会得到 `command not found`。
+
+```bash
+docker build -t qcs-bridge:latest .
+```
+
+**密钥和凭证都不进镜像**，运行时给：
+
+```bash
+docker run -d --name qcs-bridge --restart unless-stopped \
+  -v "$HOME/.qcs-secret:/home/qcs/.qcs-secret:ro" \
+  -v "$HOME/.aws:/home/qcs/.aws:ro" \
+  -v qcs-logs:/home/qcs/logs \
+  qcs-bridge:latest
+```
+
+密钥里带着区域，所以不用再传 `AWS_REGION`；容器内会被钉成 token 里那个区。也可以用
+`-e QCS_SECRET='qcs1:<region>:<secret>'` 代替挂载，但那样密钥会出现在
+`docker inspect` 里。容器以非 root 用户 `qcs`(uid 10001) 运行；默认只读白名单开启，
+`docker run … qcs-bridge:latest --allow-all` 才会放开任意命令执行。
+
+跑在容器里就没有 CloudShell 那个 20-30 分钟回收 VM 的问题（配上 `--restart` 基本常在），
+但**容器不在 CloudShell 的网络位置、也不是 CloudShell 的身份**——如果你要的正是"从
+CloudShell 内部访问"，容器不等价。
+
 ## 组件
 
 | 文件 | 运行位置 | 说明 |
