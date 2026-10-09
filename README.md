@@ -104,7 +104,7 @@ curl -fsSL https://raw.githubusercontent.com/aceaura/qcs-bridge/main/infra/unins
 
 ## 容器方式跑 agent（替代 CloudShell）
 
-根目录 `Dockerfile` 把 agent 打成镜像。镜像里带了 `aws` v2、`kubectl` 以及
+根目录 `Dockerfile` 把 agent 打成镜像。镜像里带了 `aws` v2、`kubectl`、`eksctl` 以及
 `curl`/`ping`/`dig`/`traceroute` 等只读白名单放行的命令——agent 是用 `bash -c` 执行远端
 命令的，缺了这些就只会得到 `command not found`。
 
@@ -131,6 +131,25 @@ docker run -d --name qcs-bridge --restart unless-stopped \
 但**容器不在 CloudShell 的网络位置、也不是 CloudShell 的身份**——如果你要的正是"从
 CloudShell 内部访问"，容器不等价。
 
+## EC2 常驻部署（推荐，替代 CloudShell）
+
+CloudShell 空闲 20-30 分钟就回收 VM，agent 随之死亡且无法被程序化拉起——要"随时可分析"，
+把同一个镜像跑在一台常驻 EC2 上（t4g.nano 即可，约 $3-7/月，新账号免费层可能覆盖）：
+
+1. 创建实例角色（instance profile），挂 `infra/ec2-instance-policy.json`
+   （SQS 队列 + EKS/EC2 只读；先替换 `REGION`/`ACCOUNT_ID`）。
+2. 给该角色建 EKS access entry（或 aws-auth 映射），否则 kubectl/eksctl 认证不进集群。
+3. 实例上执行（密钥经 SSM Session Manager 手工带入，**不要**写进 user data）：
+
+   ```bash
+   QCS_SECRET='qcs1:<region>:<secret>' ./infra/ec2-bootstrap.sh
+   ```
+
+容器用 `--network host` + IMDS 拿实例角色凭证，磁盘上不落任何 AWS 密钥；
+`--restart unless-stopped` 保证实例重启后自动拉起。与 CloudShell 的两点差别：身份是
+**可精确收窄的实例角色**（比 CloudShell 会话的全权身份更安全），网络位置是你 VPC 里的
+子网（建议选能访问集群私网端点的子网，否则 kubectl 需走公网端点）。
+
 ## 组件
 
 | 文件 | 运行位置 | 说明 |
@@ -146,14 +165,17 @@ CloudShell 内部访问"，容器不等价。
 ## 安全设计
 
 - **HMAC-SHA256 签名**每条命令/结果/心跳，密钥不进队列；时间戳偏差 >5 分钟拒收（防重放）
-- **只读白名单**（agent 默认开启）：`kubectl get/describe/logs/top`、`aws * describe/list/get/...`、`aws s3 ls`、基础诊断命令；含 `; & | < > $ \` ( ) \` 换行等 shell 元字符的命令一律拒绝（防命令链绕过）
+- **只读白名单**（agent 默认开启）：`kubectl get/describe/logs/top`、`eksctl get/utils describe/version`、`aws * describe/list/get/...`、`aws s3 ls`、基础诊断命令；含 `; & | < > $ \` ( ) \` 换行等 shell 元字符的命令一律拒绝（防命令链绕过）
+- 白名单另有**危险子串拒绝表**：引用密钥/凭证文件（`qcs-secret`、`.aws/`、`.ssh/`、`.kube/config`、`*.pem` 等）、写盘动词（`download`/`export`/`get-object`）的命令直接拒绝；`curl` 单独做 flag 级校验（只放行 `-s/-S/-I/-k/-L/-f/-H` 及安全长旗标，`-o`/`-X`/`--output` 等一律拒绝）
+- **密钥不进子进程**：agent 执行命令前从子进程环境中剥离 `QCS_SECRET`/`QCS_SECRET_FILE`，`env` 不在白名单内
+- **at-most-once 执行**：命令消息在验签后立即从队列删除再执行——队列可见性超时（30s）短于命令超时（最长 300s），先删可杜绝长命令被重复执行；代价是 agent 中途崩溃时命令丢失（客户端只会等到超时）
 - 队列开 SQS 托管 SSE，消息保留 1 小时
 - agent 审计日志：`~/qcs-audit.log`（时间、命令、退出码、拒绝原因）
 - 队列 IAM policy 只授权两个指定身份（`infra/iam-policy-qcs-bridge.json`）
 
 ## 已知限制
 
-- **CloudShell 空闲 ~20-30 分钟回收 VM，agent 会死**——重开 CloudShell 敲 `qcs-start` 即可。`cloudshell_status` / `qcs status` 会报告心跳新鲜度（>3 分钟判 STALE）。
+- **CloudShell 空闲 ~20-30 分钟回收 VM，agent 会死**——重开 CloudShell 敲 `qcs-start` 即可。`cloudshell_status` / `qcs status` 会报告心跳新鲜度（>3 分钟判 STALE）。要免除手动重启，见上文"EC2 常驻部署"。
 - 单次输出 ≤ ~200KB（超出截断并标注 `[truncated]`）
 - 端到端延迟 ~1-3 秒（SQS 长轮询）
 - agent 单并发：一次只执行一条命令

@@ -1,11 +1,11 @@
 ---
 name: cloudshell
-description: 通过 qcs CLI 在 AWS CloudShell 环境里执行命令（以 CloudShell 的 IAM 身份和网络位置）。当用户要求检查线上 AWS、EKS、kubectl 资源，或需要在 CloudShell 里执行命令，或提到 CloudShell、qcs、qcs-bridge 时使用。
+description: 通过 qcs CLI 在 AWS CloudShell（或常驻 EC2/容器）环境里执行命令（以远端主机的 IAM 身份和网络位置）。当用户要求检查线上 AWS、EKS、kubectl、eksctl 资源，或需要在 CloudShell 里执行命令，或提到 CloudShell、qcs、qcs-bridge 时使用。
 ---
 
 # cloudshell
 
-本机装有 `qcs` CLI，它通过 SQS 桥接在 AWS CloudShell 内执行命令（CloudShell 侧由 qcs-agent 常驻进程执行）。
+本机装有 `qcs` CLI，它通过 SQS 桥接在远端主机（CloudShell、常驻 EC2 或容器）内执行命令（远端由 qcs-agent 常驻进程执行）。
 
 ## 使用方式
 
@@ -29,9 +29,9 @@ description: 通过 qcs CLI 在 AWS CloudShell 环境里执行命令（以 Cloud
 
 ## 限制（务必遵守）
 
-- 该通道当前以 `--allow-all` 运行：**任意命令都会被真实执行**，没有白名单拦截。命令以 CloudShell 的普通用户身份执行（该用户在 `sudo` 组内）。
-- 只读查询可以直接执行。**变更类或破坏性操作（写入、删除、部署、改权限、改配置）必须先向用户说明影响并取得确认**，不要自行执行。
-- agent 也可能被重启回只读白名单模式（不带 `--allow-all`）。此时不在白名单内的命令、以及含 `; & | < > $ \` ( )` 或换行的命令会被拒；被拒时**不要尝试绕过**，向用户说明并让其决定是手动执行还是放开模式。
+- agent 默认以**只读白名单**运行：kubectl/eksctl 的读命令、`aws * describe/list/get/...`、基础诊断可直接执行。不在白名单内、含 `; & | < > $ \` ( )` 或换行、或引用敏感文件（密钥/凭证/`.ssh` 等）的命令会被拒；被拒时**不要尝试绕过**，向用户说明并让其决定是手动执行还是放开模式。
+- agent 也可能被以 `--allow-all` 启动：此时**任意命令都会被真实执行**，没有白名单拦截。只读查询可以直接执行；**变更类或破坏性操作（写入、删除、部署、改权限、改配置）必须先向用户说明影响并取得确认**，不要自行执行。
+- 命令是 at-most-once：agent 收到即从队列删除再执行，中途崩溃时命令会丢（表现为客户端超时），不会重复执行；超时后可安全重发。
 - 单次输出上限 ~200KB，超出会被截断（输出中标注 `[truncated]`）；需要大输出时改用更窄的过滤条件重试。
 - 端到端延迟约 1-3 秒，超时上限 300 秒。
 

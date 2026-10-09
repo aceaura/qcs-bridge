@@ -1,9 +1,9 @@
 # qcs-bridge agent container.
 #
 # The agent runs remote commands through `bash -c`, so the image has to carry
-# the tools its read-only allowlist permits (kubectl, aws, and the basic
-# diagnostics) or those commands fail with "command not found" instead of
-# running. See internal/proto/proto.go for the allowlist.
+# the tools its read-only allowlist permits (kubectl, eksctl, aws, and the
+# basic diagnostics) or those commands fail with "command not found" instead
+# of running. See internal/proto/proto.go for the allowlist.
 #
 # No credentials and no secret are baked in — supply both at run time.
 # See the run examples at the bottom of this file.
@@ -63,6 +63,14 @@ RUN case "$TARGETARCH" in \
 RUN curl -fsSL -o /usr/local/bin/kubectl \
         "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
     && chmod 0755 /usr/local/bin/kubectl
+
+# eksctl (the read-only allowlist permits `eksctl get`, `eksctl utils
+# describe`, and `eksctl version`).
+ARG EKSCTL_VERSION=v0.231.0
+RUN curl -fsSL -o /tmp/eksctl.tar.gz \
+        "https://github.com/eksctl-io/eksctl/releases/download/${EKSCTL_VERSION}/eksctl_Linux_${TARGETARCH}.tar.gz" \
+    && tar -xzf /tmp/eksctl.tar.gz -C /usr/local/bin eksctl \
+    && rm /tmp/eksctl.tar.gz
 
 COPY --from=build /out/qcs-agent /usr/local/bin/qcs-agent
 

@@ -104,11 +104,63 @@ func VerifyHeartbeat(secret string, h Heartbeat) bool {
 // In read-only mode a matched command is rejected outright.
 var shellMetachars = regexp.MustCompile(`[;&|<>$` + "`" + `\\(\)\n\r]`)
 
+// deniedSubstrings blocks allowlist bypasses that write to disk or expose
+// credentials, no matter which allowlisted command carries them
+// (e.g. `cat ~/.qcs-secret`, `curl -s -o /tmp/x`, `aws s3api get-object`,
+// IMDS credential paths).
+var deniedSubstrings = []string{
+	"qcs-secret",
+	".aws/",
+	".ssh/",
+	".kube/config",
+	"id_rsa",
+	"id_ed25519",
+	".pem",
+	".key",
+	"credentials",
+	"get-object",
+	"download",
+	"export",
+}
+
 var readOnlyPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^\s*kubectl\s+(get|describe|logs|top|api-resources|api-versions|cluster-info|version|config\s+current-context)\b`),
-	regexp.MustCompile(`^\s*aws\s+[\w-]+\s+(describe|list|get|lookup|query|search|check|head|batch-get|download|export|ls)[\w-]*(\s|$)`),
+	regexp.MustCompile(`^\s*eksctl\s+(get|utils\s+describe|version)\b`),
+	regexp.MustCompile(`^\s*aws\s+[\w-]+\s+(describe|list|get|lookup|query|search|check|head|batch-get|ls)[\w-]*(\s|$)`),
 	regexp.MustCompile(`^\s*aws\s+sts\s+get-caller-identity\b`),
-	regexp.MustCompile(`^\s*(ping|dig|nslookup|host|traceroute|curl\s+-[sSIk]+\s|uname|date|uptime|df\s|free\s|cat\s|ls\s|pwd|whoami|env\s*$)`),
+	regexp.MustCompile(`^\s*(ping|dig|nslookup|host|traceroute|uname|date|uptime|df\s|free\s|cat\s|ls\s|pwd|whoami)`),
+}
+
+// curl gets its own flag-level check instead of a regex on the first flag
+// cluster: `curl -s -o /tmp/x <url>` used to slip through and write files.
+const curlAllowedShort = "sSIkLfH"
+
+var curlAllowedLong = map[string]bool{
+	"--silent": true, "--show-error": true, "--head": true,
+	"--insecure": true, "--location": true, "--fail": true,
+}
+
+var curlStart = regexp.MustCompile(`^\s*curl(\s|$)`)
+
+func checkCurlFlags(cmd string) error {
+	fields := strings.Fields(cmd)
+	for _, f := range fields[1:] {
+		if !strings.HasPrefix(f, "-") || f == "-" {
+			continue
+		}
+		if strings.HasPrefix(f, "--") {
+			if !curlAllowedLong[f] {
+				return fmt.Errorf("curl option %q is not allowed in read-only mode", f)
+			}
+			continue
+		}
+		for _, r := range f[1:] {
+			if !strings.ContainsRune(curlAllowedShort, r) {
+				return fmt.Errorf("curl flag -%c is not allowed in read-only mode", r)
+			}
+		}
+	}
+	return nil
 }
 
 // CheckReadOnly enforces the allowlist and rejects shell chaining.
@@ -116,12 +168,20 @@ func CheckReadOnly(cmd string) error {
 	if shellMetachars.MatchString(cmd) {
 		return fmt.Errorf("shell metacharacters (; & | < > $ ` ( ) \\ newline) are not allowed in read-only mode")
 	}
+	for _, s := range deniedSubstrings {
+		if strings.Contains(cmd, s) {
+			return fmt.Errorf("command references %q, which is denied in read-only mode", s)
+		}
+	}
+	if curlStart.MatchString(cmd) {
+		return checkCurlFlags(cmd)
+	}
 	for _, p := range readOnlyPatterns {
 		if p.MatchString(cmd) {
 			return nil
 		}
 	}
-	return fmt.Errorf("command not in read-only allowlist (allowed: kubectl get/describe/logs/top, aws describe/list/get/..., basic diagnostics)")
+	return fmt.Errorf("command not in read-only allowlist (allowed: kubectl/eksctl read verbs, aws describe/list/get/..., basic diagnostics)")
 }
 
 const truncSuffix = "\n...[truncated]"

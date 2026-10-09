@@ -119,6 +119,7 @@ func (a *agent) execute(ctx context.Context, c proto.Command) proto.Result {
 	defer cancel()
 
 	cmd := exec.CommandContext(cmdCtx, "bash", "-c", c.Cmd)
+	cmd.Env = scrubbedEnv()
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -142,6 +143,21 @@ func (a *agent) execute(ctx context.Context, c proto.Command) proto.Result {
 	r.Stdout, r.Stderr, r.Truncated = proto.Truncate(stdout.String(), stderr.String())
 	a.auditf("EXEC id=%s exit=%d truncated=%v cmd=%q", c.ID, r.ExitCode, r.Truncated, c.Cmd)
 	return r
+}
+
+// scrubbedEnv strips the HMAC secret from the environment handed to executed
+// commands: when the secret comes from QCS_SECRET, any child process (`env`,
+// a shell expansion, a crashing tool's debug dump) would otherwise see it.
+func scrubbedEnv() []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if name, _, _ := strings.Cut(kv, "="); name == "QCS_SECRET" || name == "QCS_SECRET_FILE" {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 // displayResult prints the full interaction to the terminal (and log file
@@ -197,23 +213,47 @@ func (a *agent) pollOnce(ctx context.Context) error {
 		}
 
 		a.auditf(">>> RECV id=%s timeout=%ds cmd=%q", c.ID, c.Timeout, c.Cmd)
+		// Delete before executing: the queue's VisibilityTimeout (30s) is
+		// shorter than a command's timeout (up to 300s), so holding the
+		// message until after execution made it reappear and the agent ran
+		// the same command again. At-most-once is the right trade here — a
+		// lost result only costs the client a timeout, while re-running a
+		// mutating command is real damage.
+		a.delete(ctx, msg.ReceiptHandle)
 		r := a.execute(ctx, c)
 		a.displayResult(r)
 		proto.SignResult(a.secret, &r)
-		body, _ := json.Marshal(r)
-		_, sendErr := a.sqsClient.SendMessage(ctx, &sqs.SendMessageInput{
-			QueueUrl:               aws.String(a.resQueue),
-			MessageBody:            aws.String(string(body)),
-			MessageGroupId:         aws.String("qcs"),
-			MessageDeduplicationId: aws.String("res-" + r.ID),
-		})
-		if sendErr != nil {
-			log.Printf("result send failed for %s: %v (command left for retry)", r.ID, sendErr)
-			continue
-		}
-		a.delete(ctx, msg.ReceiptHandle)
+		a.sendResult(ctx, r)
 	}
 	return nil
+}
+
+// sendResult posts a signed result, retrying briefly on transient SQS errors.
+// The command message is already deleted, so giving up only loses the result.
+func (a *agent) sendResult(ctx context.Context, r proto.Result) {
+	body, _ := json.Marshal(r)
+	in := &sqs.SendMessageInput{
+		QueueUrl:               aws.String(a.resQueue),
+		MessageBody:            aws.String(string(body)),
+		MessageGroupId:         aws.String("qcs"),
+		MessageDeduplicationId: aws.String("res-" + r.ID),
+	}
+	for attempt := 1; attempt <= 3; attempt++ {
+		_, err := a.sqsClient.SendMessage(ctx, in)
+		if err == nil {
+			return
+		}
+		if attempt == 3 {
+			log.Printf("result send failed for %s (giving up): %v", r.ID, err)
+			return
+		}
+		log.Printf("result send failed for %s (attempt %d/3): %v", r.ID, attempt, err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Duration(attempt) * 2 * time.Second):
+		}
+	}
 }
 
 func (a *agent) delete(ctx context.Context, receipt *string) {
